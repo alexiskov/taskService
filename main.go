@@ -3,32 +3,35 @@ package main
 import (
 	"fmt"
 	"os"
-	"tasvs/bridge"
 	"tasvs/httpserver"
 	"tasvs/sqlp"
 )
 
-type (
-	ToDbMemCash struct {
-	}
-	ToHttpMemCash struct {
-	}
+var (
+	HTTPtoDb  = make(chan httpserver.ToDB)
+	HTTPtoWeb = make(chan httpserver.FromDB)
+	SQLtoWeb  = make(chan sqlp.FromDB)
+	SQLtoDB   = make(chan sqlp.ToDB)
 )
 
 func main() {
-	toDb := &ToDbMemCash{}
-	toHTTP := &ToHttpMemCash{}
+	go mutator(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
-	bridge.Run(toHTTP, toDb)
+	go func() {
+		err := sqlp.New("", &SQLtoDB, &SQLtoWeb)
+		if err != nil {
+			fmt.Fprint(os.Stderr, err)
+			return
+		}
+	}()
 
-	err := httpserver.Start(toHTTP)
+	err := httpserver.Start(&HTTPtoWeb, &HTTPtoDb)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server initialization error!\n %+v", err)
 	}
 
-	dnManager, err := sqlp.New("")
-	if err != nil {
-		fmt.Fprint(os.Stderr, err)
-		return
-	}
+}
+
+func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDB *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) {
+
 }

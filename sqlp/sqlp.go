@@ -9,12 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type DbManager interface {
-	ShowTasks() (Tasks, error)
-	UpdateTask(newTask Task) (task *Task, err error)
-	CreateTask(task Task) error
-}
-
 type dB struct {
 	Socket *pgxpool.Pool
 }
@@ -29,31 +23,46 @@ type (
 		Updated time.Time `json:"updated_at"`
 	}
 
-	Tasks []Task
+	FromDB struct {
+		Task      *[]Task
+		NumThread int64
+	}
+
+	ToDB struct {
+		Task      *Task
+		CRUDtype  int8
+		NumThread int64
+	}
 )
 
-// storage manager initialization
-// return interface or error
-func New(socket string) (db DbManager, err error) {
-	database := dB{}
+func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
+	db := dB{}
 	conf, err := pgxpool.ParseConfig(socket)
 	if err != nil {
-		return nil, fmt.Errorf("database credentials parsing error: %w", err)
+		return fmt.Errorf("database credentials parsing error: %w", err)
 	}
-	database.Socket, err = pgxpool.NewWithConfig(context.Background(), conf)
+	db.Socket, err = pgxpool.NewWithConfig(context.Background(), conf)
 	if err != nil {
-		return nil, fmt.Errorf("database connection pool making error: %w\n", err)
+		return fmt.Errorf("database connection pool making error: %w\n", err)
 	}
-	db = &database
+	db.run(inc, out)
 	return
 }
 
-func Run(mgr *DbManager, anya any) {
-
+func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
+	for {
+		select {
+		case incomingData := <-*inc:
+			switch incomingData.CRUDtype {
+			case 1:
+				db.ShowTasks()
+			}
+		}
+	}
 }
 
 // method SELECT
-func (db *dB) ShowTasks() (Tasks, error) {
+func (db *dB) ShowTasks() (tasks []Task, err error) {
 	tx, err := db.Socket.Begin(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("database socket initialization error:\n %w", err)
@@ -65,11 +74,11 @@ func (db *dB) ShowTasks() (Tasks, error) {
 		return nil, fmt.Errorf("error of task list selection:\n %w", err)
 	}
 
-	tasks, err := pgx.CollectRows(rows, pgx.RowToStructByName[Task])
+	tasks, err = pgx.CollectRows(rows, pgx.RowToStructByName[Task])
 	if err != nil {
 		return nil, fmt.Errorf("parse rows to list of task error: %w", err)
 	}
-	return tasks, nil
+	return
 }
 
 // method CREATE
@@ -87,10 +96,10 @@ func (db *dB) CreateTask(task Task) error {
 	return nil
 }
 
-func (db *dB) UpdateTask(task Task) (*Task, error) {
+func (db *dB) UpdateTask(task Task) error {
 	//	date:
 	db.Socket.QueryRow(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, time.Now())
-	return nil, nil
+	return nil
 }
 
 //func (db *dB)

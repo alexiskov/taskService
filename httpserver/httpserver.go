@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"tasvs/sqlp"
+	"sync"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -19,9 +19,9 @@ type ApiTask struct {
 
 type (
 	HTTPServer struct {
-		HTTPport  string
-		WebSocket Socket
-		DbManager sqlp.DbManager
+		HTTPport           string
+		WebSocket          Socket
+		dbResponseReciever map[int64]FromDB
 	}
 
 	Socket struct {
@@ -31,23 +31,32 @@ type (
 	}
 
 	PP struct {
-		Task      *ApiTask
-		ISentToDB bool
+		Out      *chan ToDB
+		Incoming *chan FromDB
+	}
+
+	ToDB struct {
+		Task      ApiTask
 		CRUDtype  int8
+		NumThread int64
+	}
+
+	FromDB struct {
+		Task      ApiTask
+		NumThread int64
 	}
 )
 
-func Start(anya any) error {
-	task := &ApiTask{}
-
+func Start(inc *chan FromDB, out *chan ToDB) error {
 	srv := &HTTPServer{}
 	srv.WebSocket.Config = &fiber.Config{}
 	srv.WebSocket.Driver = fiber.New(*srv.WebSocket.Config)
-	srv.WebSocket.BridgePipe.Task = task
+	srv.WebSocket.BridgePipe = &PP{out, inc}
 	return nil
 }
 
-func (srv *HTTPServer) run() error {
+func (srv *HTTPServer) Run() error {
+	go srv.recieveMGR(srv.WebSocket.BridgePipe.Incoming)
 	srv.WebSocket.Driver.Get("/tasks", srv.ShowTasks)
 	srv.WebSocket.Driver.Post("/tasks/", srv.CreateTask)
 	srv.WebSocket.Driver.Put("tasks/:id", srv.UpdateTask)
@@ -61,13 +70,12 @@ func (srv *HTTPServer) run() error {
 
 // handler to GET
 func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
-	if !srv.WebSocket.BridgePipe.ISentToDB {
-		srv.WebSocket.BridgePipe.ISentToDB = true
 
-		srv.WebSocket.BridgePipe.ISentToDB = false
-	}
 	fCtx.Set("Content-Type", "application/json")
-	fCtx.Status(http.StatusOK).JSON(srv.WebSocket.BridgePipe.Task)
+	//
+	//over chan to db data sent
+	//
+	fCtx.Status(http.StatusOK).JSON()
 
 	return nil
 }
@@ -79,9 +87,7 @@ func (srv *HTTPServer) CreateTask(fCtx *fiber.Ctx) error {
 	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
 		return fmt.Errorf("json unmarshaling error: %w", err)
 	}
-	if err := srv.DbManager.CreateTask(toDBmutator(task)); err != nil {
-		return err
-	}
+	//to db
 	return fCtx.Status(http.StatusOK).JSON(createResponse("task is created"))
 }
 
@@ -106,10 +112,15 @@ func createResponse(a any) *fiber.Map {
 	return &fiber.Map{"message": a}
 }
 
-func toResponsemutator(t sqlp.Task) ApiTask {
-	return ApiTask{ID: t.ID, Title: t.Title, Description: t.Desc, CreatedAt: t.Created.Format("2006-01-02 15:04:05"), UpdatedAt: t.Updated.Format("2006-01-02 15:04:05")}
-}
-
-func toDBmutator(t ApiTask) sqlp.Task {
-	return sqlp.Task{ID: t.ID, Title: t.Title, Desc: t.Description}
+func (src *HTTPServer) recieveMGR(inc *chan FromDB) {
+	recieverOfResponseFromDB := make(map[int64]FromDB, 1000)
+	var mutex sync.Mutex
+	for {
+		select {
+		case fromDBdata := <-*inc:
+			mutex.Lock()
+			recieverOfResponseFromDB[fromDBdata.NumThread] = fromDBdata
+			mutex.Unlock()
+		}
+	}
 }
