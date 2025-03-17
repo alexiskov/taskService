@@ -58,6 +58,7 @@ func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toD
 			*toHTTP <- httpserver.FromDB{
 				Task:      tasks,
 				NumThread: fromDbData.NumThread,
+				IsOk:      fromDbData.IsOk,
 			}
 		}
 	}

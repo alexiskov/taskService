@@ -19,6 +19,7 @@ type ApiTask struct {
 	Status      string
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	IsOk        bool
 }
 
 type (
@@ -49,6 +50,7 @@ type (
 	FromDB struct {
 		Task      []ApiTask
 		NumThread int64
+		IsOk      bool
 	}
 )
 
@@ -67,9 +69,9 @@ func Start(port string, inc *chan FromDB, out *chan ToDB) error {
 func (srv *HTTPServer) run() error {
 	go srv.recieveMGR(srv.WebSocket.BridgePipe.Incoming)
 	srv.WebSocket.Driver.Get("/tasks", srv.ShowTasks)
-	srv.WebSocket.Driver.Post("/tasks/", srv.CreateTask)
-	srv.WebSocket.Driver.Put("tasks/:id", srv.UpdateTask)
-	srv.WebSocket.Driver.Delete("/tasks/:id", srv.DeleteTask)
+	srv.WebSocket.Driver.Post("/tasks", srv.CreateTask)
+	srv.WebSocket.Driver.Put("/tasks/:id?", srv.UpdateTask)
+	srv.WebSocket.Driver.Delete("/tasks/:id?", srv.DeleteTask)
 
 	if err := srv.WebSocket.Driver.Listen(srv.HTTPport); err != nil {
 		return err
@@ -85,8 +87,11 @@ func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
 	//get task from response pool by number of thread
 	data := srv.dbResponseSeparator(threadData.NumThread)
 	//http.response
+	if !data.IsOk {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("database processing error"))
+	}
 	fCtx.Set("Content-Type", "application/json")
-	fCtx.Status(http.StatusOK).JSON(data)
+	fCtx.Status(http.StatusOK).JSON(data.Task)
 	return nil
 }
 
@@ -102,8 +107,12 @@ func (srv *HTTPServer) CreateTask(fCtx *fiber.Ctx) error {
 	*srv.WebSocket.BridgePipe.Out <- threadData
 	//from mutator
 	data := srv.dbResponseSeparator(threadData.NumThread)
+	//HTTP response
 	fCtx.Set("Content-Type", "application/json")
-	fCtx.Status(http.StatusOK).JSON(data[0])
+	if !data.IsOk {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("database processing error"))
+	}
+	fCtx.Status(http.StatusOK).JSON(data.Task[0])
 	return nil
 }
 
@@ -133,7 +142,8 @@ func (srv *HTTPServer) UpdateTask(fCtx *fiber.Ctx) error {
 
 // handler to DELETE
 func (srv *HTTPServer) DeleteTask(fCtx *fiber.Ctx) error {
-
+	//
+	//
 	return nil
 }
 
@@ -178,12 +188,12 @@ func (srv *HTTPServer) recieveMGR(inc *chan FromDB) {
 
 // получает данные из пулла ответов от базы данных, возвращает задачи соответствующие номеру потока вызвавшего клиента
 // удаляет использованные данные из накопителя
-func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
+func (srv *HTTPServer) dbResponseSeparator(numThread int64) FromDB {
 	var mutex sync.Mutex
-	data := []ApiTask{}
+	data := FromDB{}
 	for {
 		if val, ok := srv.dbResponseReciever[numThread]; ok {
-			data = val.Task
+			data = FromDB{Task: val.Task, IsOk: val.IsOk}
 			mutex.Lock()
 			delete(srv.dbResponseReciever, val.NumThread)
 			mutex.Unlock()

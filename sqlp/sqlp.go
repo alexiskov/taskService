@@ -27,6 +27,7 @@ type (
 	FromDB struct {
 		Task      *[]Task
 		NumThread int64
+		IsOk      bool
 	}
 
 	ToDB struct {
@@ -63,28 +64,40 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 			case 1:
 				task := Task{Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
 				if err := db.CreateTask(task); err != nil {
+					var empty []Task
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
 					//logger
 					continue
 				}
+				*out <- FromDB{NumThread: incomingData.NumThread, IsOk: true}
 			case 2:
 				tasks, err := db.ShowTasks()
 				if err != nil {
+					var empty []Task
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
 					//loger
 					continue
 				}
-				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread}
+				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 3:
 				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc, Status: incomingData.Task.Status, Updated: time.Now()}
 				resp, err := db.UpdateTask(task)
 				if err != nil {
-					//logger
+					var empty []Task
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread} //logger
 					continue
 				}
 				tasks := []Task{}
 				tasks = append(tasks, resp)
-				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread}
+				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 4:
-
+				task := Task{Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
+				if err := db.RemoveTask(task); err != nil {
+					var empty []Task
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread} //logger
+					continue
+				}
+				*out <- FromDB{NumThread: incomingData.NumThread, IsOk: true}
 			}
 		}
 	}
