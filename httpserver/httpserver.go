@@ -44,7 +44,7 @@ type (
 	}
 
 	FromDB struct {
-		Task      ApiTask
+		Task      []ApiTask
 		NumThread int64
 	}
 )
@@ -77,14 +77,13 @@ func (srv *HTTPServer) run() error {
 // handler to GET
 func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
 	//to mutator over channel
-	threadData, _ := srv.threadToDbPrepeare(ApiTask{})
+	threadData := srv.threadToDbPrepeare(ToDB{Task: ApiTask{}, CRUDtype: 2})
 	*srv.WebSocket.BridgePipe.Out <- threadData
 	//from mutator
-	//data := srv.dbResponseSeparator(numThread)
+	data := srv.dbResponseSeparator(threadData.NumThread)
 	//http.response
-	//fCtx.Set("Content-Type", "application/json")
-	fCtx.WriteString(fmt.Sprintf("%+v", "dddd"))
-	//fCtx.Status(http.StatusOK).JSON(data)
+	fCtx.Set("Content-Type", "application/json")
+	fCtx.Status(http.StatusOK).JSON(data)
 
 	return nil
 }
@@ -107,7 +106,6 @@ func (srv *HTTPServer) UpdateTask(fCtx *fiber.Ctx) error {
 	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
 		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("json parsing error"))
 	}
-
 	return fCtx.Status(http.StatusOK).JSON(createResponse("task is updated"))
 }
 
@@ -122,10 +120,9 @@ func createResponse(a any) *fiber.Map {
 }
 
 // выбираем номер потока не всписке отправленных
-// возвращает подготовленный тип для отправки по каналу в мутатор и номер потока
-func (srv *HTTPServer) threadToDbPrepeare(data ApiTask) (ToDB, int64) {
+// возвращает подготовленный тип для отправки по каналу в мутатор
+func (srv *HTTPServer) threadToDbPrepeare(data ToDB) ToDB {
 	var mutex sync.Mutex
-
 	var numThread int64
 	for {
 		numThreadData := rand.Intn(1844674407370955161)
@@ -137,13 +134,14 @@ func (srv *HTTPServer) threadToDbPrepeare(data ApiTask) (ToDB, int64) {
 			break
 		}
 	}
-	return ToDB{NumThread: numThread, Task: data, CRUDtype: 2}, numThread
+	data.NumThread = numThread
+	return data
 }
 
 // не
-func (srv *HTTPServer) dbResponseSeparator(numThread int64) ApiTask {
+func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
 	var mutex sync.Mutex
-	data := ApiTask{}
+	data := []ApiTask{}
 	for {
 		if val, ok := srv.dbResponseReciever[numThread]; ok {
 			data = val.Task

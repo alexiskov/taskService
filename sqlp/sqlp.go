@@ -45,7 +45,9 @@ func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
 	if err != nil {
 		return fmt.Errorf("database connection pool making error: %w\n", err)
 	}
-	db.run(inc, out)
+	if err = db.run(inc, out); err != nil {
+		return
+	}
 	return
 }
 
@@ -55,7 +57,28 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 		case incomingData := <-*inc:
 			switch incomingData.CRUDtype {
 			case 1:
-				db.ShowTasks()
+				task := Task{Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
+				if err := db.CreateTask(task); err != nil {
+					//logger
+					continue
+				}
+			case 2:
+				tasks, err := db.ShowTasks()
+				if err != nil {
+					//loger
+					continue
+				}
+				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread}
+			case 3:
+				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc, Status: incomingData.Task.Status, Updated: time.Now()}
+				resp, err := db.UpdateTask(task)
+				if err != nil {
+					//logger
+					continue
+				}
+				tasks := []Task{}
+				tasks = append(tasks, resp)
+				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread}
 			}
 		}
 	}
@@ -96,10 +119,14 @@ func (db *dB) CreateTask(task Task) error {
 	return nil
 }
 
-func (db *dB) UpdateTask(task Task) error {
-	//	date:
-	db.Socket.QueryRow(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, time.Now())
-	return nil
+// UPDATE
+func (db *dB) UpdateTask(task Task) (Task, error) {
+	taskResponse := Task{}
+	err := db.Socket.QueryRow(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, task.Updated.Unix()).Scan(&taskResponse)
+	if err != nil {
+		return Task{}, err
+	}
+	return taskResponse, nil
 }
 
 //func (db *dB)
