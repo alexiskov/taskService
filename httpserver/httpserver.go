@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
 
@@ -22,6 +23,7 @@ type (
 		HTTPport           string
 		WebSocket          Socket
 		dbResponseReciever map[int64]FromDB
+		threadPool         map[int64]bool
 	}
 
 	Socket struct {
@@ -47,15 +49,19 @@ type (
 	}
 )
 
-func Start(inc *chan FromDB, out *chan ToDB) error {
-	srv := &HTTPServer{}
+func Start(port string, inc *chan FromDB, out *chan ToDB) error {
+	srv := &HTTPServer{HTTPport: port}
 	srv.WebSocket.Config = &fiber.Config{}
 	srv.WebSocket.Driver = fiber.New(*srv.WebSocket.Config)
 	srv.WebSocket.BridgePipe = &PP{out, inc}
+	srv.threadPool = make(map[int64]bool, 1000)
+	if err := srv.run(); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (srv *HTTPServer) Run() error {
+func (srv *HTTPServer) run() error {
 	go srv.recieveMGR(srv.WebSocket.BridgePipe.Incoming)
 	srv.WebSocket.Driver.Get("/tasks", srv.ShowTasks)
 	srv.WebSocket.Driver.Post("/tasks/", srv.CreateTask)
@@ -70,12 +76,15 @@ func (srv *HTTPServer) Run() error {
 
 // handler to GET
 func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
-
-	fCtx.Set("Content-Type", "application/json")
-	//
-	//over chan to db data sent
-	//
-	fCtx.Status(http.StatusOK).JSON()
+	//to mutator over channel
+	threadData, _ := srv.threadToDbPrepeare(ApiTask{})
+	*srv.WebSocket.BridgePipe.Out <- threadData
+	//from mutator
+	//data := srv.dbResponseSeparator(numThread)
+	//http.response
+	//fCtx.Set("Content-Type", "application/json")
+	fCtx.WriteString(fmt.Sprintf("%+v", "dddd"))
+	//fCtx.Status(http.StatusOK).JSON(data)
 
 	return nil
 }
@@ -112,6 +121,43 @@ func createResponse(a any) *fiber.Map {
 	return &fiber.Map{"message": a}
 }
 
+// выбираем номер потока не всписке отправленных
+// возвращает подготовленный тип для отправки по каналу в мутатор и номер потока
+func (srv *HTTPServer) threadToDbPrepeare(data ApiTask) (ToDB, int64) {
+	var mutex sync.Mutex
+
+	var numThread int64
+	for {
+		numThreadData := rand.Intn(1844674407370955161)
+		if _, ok := srv.threadPool[int64(numThreadData)]; !ok {
+			numThread = int64(numThreadData)
+			mutex.Lock()
+			srv.threadPool[int64(numThreadData)] = true
+			mutex.Unlock()
+			break
+		}
+	}
+	return ToDB{NumThread: numThread, Task: data, CRUDtype: 2}, numThread
+}
+
+// не
+func (srv *HTTPServer) dbResponseSeparator(numThread int64) ApiTask {
+	var mutex sync.Mutex
+	data := ApiTask{}
+	for {
+		if val, ok := srv.dbResponseReciever[numThread]; ok {
+			data = val.Task
+			mutex.Lock()
+			delete(srv.dbResponseReciever, val.NumThread)
+			mutex.Unlock()
+			break
+		}
+	}
+	return data
+}
+
+// воркер, обрабатывающий ответ от мутатора через канал
+// наполняет пулл ответов от БД для веб-сервера, для последующего разбора и отправки клиенту
 func (src *HTTPServer) recieveMGR(inc *chan FromDB) {
 	recieverOfResponseFromDB := make(map[int64]FromDB, 1000)
 	var mutex sync.Mutex

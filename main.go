@@ -15,6 +15,7 @@ var (
 )
 
 func main() {
+	fmt.Println(HTTPtoDb)
 	go mutator(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
 	go func() {
@@ -25,13 +26,18 @@ func main() {
 		}
 	}()
 
-	err := httpserver.Start(&HTTPtoWeb, &HTTPtoDb)
+	err := httpserver.Start(":8080", &HTTPtoWeb, &HTTPtoDb)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server initialization error!\n %+v", err)
 	}
 
 }
 
-func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDB *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) {
-
+func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDB *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) error {
+	for {
+		select {
+		case todb := <-*fromHTTP:
+			fmt.Println(todb)
+		}
+	}
 }
