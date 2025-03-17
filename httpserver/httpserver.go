@@ -13,13 +13,13 @@ import (
 var TASK_STATS = [3]string{"new", "in_progress", "done"}
 
 type ApiTask struct {
-	ID          uint64
-	Title       string
-	Description string
-	Status      string
+	ID          uint64 `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
-	IsOk        bool
+	IsOk        bool   `json:"-"`
 }
 
 type (

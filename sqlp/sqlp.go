@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,12 +17,12 @@ type dB struct {
 
 type (
 	Task struct {
-		ID      uint64
-		Title   string
-		Desc    string
-		Status  string
-		Created time.Time
-		Updated time.Time
+		ID      uint64    `db:"id"`
+		Title   string    `db:"title"`
+		Desc    string    `db:"description"`
+		Status  string    `db:"status"`
+		Created time.Time `db:"created_at"`
+		Updated time.Time `db:"updated_at"`
 	}
 
 	FromDB struct {
@@ -40,6 +41,7 @@ type (
 func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
 	db := dB{}
 	conf, err := pgxpool.ParseConfig(socket)
+	conf.ConnConfig.TLSConfig = nil
 	if err != nil {
 		return fmt.Errorf("database credentials parsing error: %w", err)
 	}
@@ -111,13 +113,14 @@ func (db *dB) ShowTasks() (tasks []Task, err error) {
 	}
 	defer tx.Rollback(context.Background())
 
-	rows, err := tx.Query(context.Background(), "select * from `tableName`")
+	rows, err := tx.Query(context.Background(), "select * from tasks")
 	if err != nil {
 		return nil, fmt.Errorf("error of task list selection:\n %w", err)
 	}
 
 	tasks, err = pgx.CollectRows(rows, pgx.RowToStructByName[Task])
 	if err != nil {
+		log.Println(err)
 		return nil, fmt.Errorf("parse rows to list of task error: %w", err)
 	}
 	return

@@ -18,7 +18,7 @@ func main() {
 	go mutator(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
 	go func() error {
-		err := sqlp.New("", &SQLtoDB, &SQLtoWeb)
+		err := sqlp.New("postgres://pguser:secret!@localhost:5432/db_1", &SQLtoDB, &SQLtoWeb)
 		if err != nil {
 			fmt.Fprint(os.Stderr, err)
 			return err
@@ -52,7 +52,7 @@ func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toD
 		case fromDbData := <-*fromDB:
 			var tasks []httpserver.ApiTask
 			for _, t := range *fromDbData.Task {
-				task := httpserver.ApiTask{ID: t.ID, Title: t.Title, Description: t.Desc, CreatedAt: t.Created.Format("2006-01-02 15:04:05"), UpdatedAt: t.Updated.Format("2006-01-02 15:04:05")}
+				task := httpserver.ApiTask{ID: t.ID, Title: t.Title, Description: t.Desc, Status: t.Status, CreatedAt: t.Created.Format("2006-01-02 15:04:05"), UpdatedAt: t.Updated.Format("2006-01-02 15:04:05")}
 				tasks = append(tasks, task)
 			}
 			*toHTTP <- httpserver.FromDB{
