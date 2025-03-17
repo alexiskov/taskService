@@ -10,10 +10,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+var TASK_STATS = [3]string{"new", "in_progress", "done"}
+
 type ApiTask struct {
 	ID          uint64
 	Title       string
 	Description string
+	Status      string
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -76,15 +79,14 @@ func (srv *HTTPServer) run() error {
 
 // handler to GET
 func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
-	//to mutator over channel
 	threadData := srv.threadToDbPrepeare(ToDB{Task: ApiTask{}, CRUDtype: 2})
+	//to mutator
 	*srv.WebSocket.BridgePipe.Out <- threadData
-	//from mutator
+	//get task from response pool by number of thread
 	data := srv.dbResponseSeparator(threadData.NumThread)
 	//http.response
 	fCtx.Set("Content-Type", "application/json")
 	fCtx.Status(http.StatusOK).JSON(data)
-
 	return nil
 }
 
@@ -95,8 +97,14 @@ func (srv *HTTPServer) CreateTask(fCtx *fiber.Ctx) error {
 	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
 		return fmt.Errorf("json unmarshaling error: %w", err)
 	}
-	//to db
-	return fCtx.Status(http.StatusOK).JSON(createResponse("task is created"))
+	//to mutator
+	threadData := srv.threadToDbPrepeare(ToDB{Task: task, CRUDtype: 1})
+	*srv.WebSocket.BridgePipe.Out <- threadData
+	//from mutator
+	data := srv.dbResponseSeparator(threadData.NumThread)
+	fCtx.Set("Content-Type", "application/json")
+	fCtx.Status(http.StatusOK).JSON(data[0])
+	return nil
 }
 
 // handler to PUT
@@ -106,11 +114,26 @@ func (srv *HTTPServer) UpdateTask(fCtx *fiber.Ctx) error {
 	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
 		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("json parsing error"))
 	}
+	isOK := false
+	for _, stauts := range TASK_STATS {
+		if stauts == task.Status {
+			isOK = true
+		}
+	}
+	if !isOK {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse(fmt.Sprintf("status '%s' is not valid", task.Status)))
+	}
+	//to mutator
+	threadData := srv.threadToDbPrepeare(ToDB{Task: task, CRUDtype: 3})
+	*srv.WebSocket.BridgePipe.Out <- threadData
+	//from mutator
+
 	return fCtx.Status(http.StatusOK).JSON(createResponse("task is updated"))
 }
 
 // handler to DELETE
 func (srv *HTTPServer) DeleteTask(fCtx *fiber.Ctx) error {
+
 	return nil
 }
 
@@ -138,7 +161,6 @@ func (srv *HTTPServer) threadToDbPrepeare(data ToDB) ToDB {
 	return data
 }
 
-// не
 func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
 	var mutex sync.Mutex
 	data := []ApiTask{}
@@ -156,14 +178,14 @@ func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
 
 // воркер, обрабатывающий ответ от мутатора через канал
 // наполняет пулл ответов от БД для веб-сервера, для последующего разбора и отправки клиенту
-func (src *HTTPServer) recieveMGR(inc *chan FromDB) {
-	recieverOfResponseFromDB := make(map[int64]FromDB, 1000)
+func (srv *HTTPServer) recieveMGR(inc *chan FromDB) {
+	srv.dbResponseReciever = make(map[int64]FromDB, 1000000)
 	var mutex sync.Mutex
 	for {
 		select {
 		case fromDBdata := <-*inc:
 			mutex.Lock()
-			recieverOfResponseFromDB[fromDBdata.NumThread] = fromDBdata
+			srv.dbResponseReciever[fromDBdata.NumThread] = fromDBdata
 			mutex.Unlock()
 		}
 	}
