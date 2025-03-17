@@ -79,6 +79,8 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 				tasks := []Task{}
 				tasks = append(tasks, resp)
 				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread}
+			case 4:
+
 			}
 		}
 	}

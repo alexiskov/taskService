@@ -161,21 +161,6 @@ func (srv *HTTPServer) threadToDbPrepeare(data ToDB) ToDB {
 	return data
 }
 
-func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
-	var mutex sync.Mutex
-	data := []ApiTask{}
-	for {
-		if val, ok := srv.dbResponseReciever[numThread]; ok {
-			data = val.Task
-			mutex.Lock()
-			delete(srv.dbResponseReciever, val.NumThread)
-			mutex.Unlock()
-			break
-		}
-	}
-	return data
-}
-
 // воркер, обрабатывающий ответ от мутатора через канал
 // наполняет пулл ответов от БД для веб-сервера, для последующего разбора и отправки клиенту
 func (srv *HTTPServer) recieveMGR(inc *chan FromDB) {
@@ -189,4 +174,21 @@ func (srv *HTTPServer) recieveMGR(inc *chan FromDB) {
 			mutex.Unlock()
 		}
 	}
+}
+
+// получает данные из пулла ответов от базы данных, возвращает задачи соответствующие номеру потока вызвавшего клиента
+// удаляет использованные данные из накопителя
+func (srv *HTTPServer) dbResponseSeparator(numThread int64) []ApiTask {
+	var mutex sync.Mutex
+	data := []ApiTask{}
+	for {
+		if val, ok := srv.dbResponseReciever[numThread]; ok {
+			data = val.Task
+			mutex.Lock()
+			delete(srv.dbResponseReciever, val.NumThread)
+			mutex.Unlock()
+			break
+		}
+	}
+	return data
 }
