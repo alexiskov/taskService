@@ -2,6 +2,7 @@ package sqlp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -51,6 +52,9 @@ func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
 	return
 }
 
+// получает данные из канала
+// выполняет операции CRUD над базой данных
+// номер операции соответствует порядковому номеру символа аббривиатуры CRUD, начиная с 1...
 func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 	for {
 		select {
@@ -86,7 +90,7 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 	}
 }
 
-// method SELECT
+// method SQL SELECT
 func (db *dB) ShowTasks() (tasks []Task, err error) {
 	tx, err := db.Socket.Begin(context.Background())
 	if err != nil {
@@ -106,7 +110,7 @@ func (db *dB) ShowTasks() (tasks []Task, err error) {
 	return
 }
 
-// method CREATE
+// ...CREATE
 func (db *dB) CreateTask(task Task) error {
 	tx, err := db.Socket.Begin(context.Background())
 	if err != nil {
@@ -121,14 +125,38 @@ func (db *dB) CreateTask(task Task) error {
 	return nil
 }
 
-// UPDATE
+// ...UPDATE
 func (db *dB) UpdateTask(task Task) (Task, error) {
+	tx, err := db.Socket.Begin(context.Background())
+	if err != nil {
+		return Task{}, fmt.Errorf("database socket initialization error:\n %w", err)
+	}
+	defer tx.Rollback(context.Background())
 	taskResponse := Task{}
-	err := db.Socket.QueryRow(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, task.Updated.Unix()).Scan(&taskResponse)
+	comTag, err := tx.Exec(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, task.Updated.Unix())
 	if err != nil {
 		return Task{}, err
+	}
+	if comTag.RowsAffected() == 0 {
+		return Task{}, fmt.Errorf("DBdata updating error: %w", err)
 	}
 	return taskResponse, nil
 }
 
-//func (db *dB)
+// ...DELETE
+func (db *dB) RemoveTask(task Task) error {
+	tx, err := db.Socket.Begin(context.Background())
+	if err != nil {
+		return fmt.Errorf("database socket initialization error:\n %w", err)
+	}
+	defer tx.Rollback(context.Background())
+
+	comTag, err := tx.Exec(context.Background(), "DELETE FROM tasks WHERE id=$1", task.ID)
+	if err != nil {
+		return fmt.Errorf("DBdata deleting error: %w", err)
+	}
+	if comTag.RowsAffected() == 0 {
+		return errors.New("DBdata deleting error: Record is Not Deleted")
+	}
+	return nil
+}
