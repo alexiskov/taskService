@@ -16,12 +16,12 @@ type dB struct {
 
 type (
 	Task struct {
-		ID      uint64    `json:"id"`
-		Title   string    `json:"title"`
-		Desc    string    `json:"description"`
-		Status  string    `json:"status"`
-		Created time.Time `json:"created_at"`
-		Updated time.Time `json:"updated_at"`
+		ID      uint64
+		Title   string
+		Desc    string
+		Status  string
+		Created time.Time
+		Updated time.Time
 	}
 
 	FromDB struct {
