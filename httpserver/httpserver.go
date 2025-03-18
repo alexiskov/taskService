@@ -1,10 +1,10 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,7 +13,7 @@ import (
 var TASK_STATS = [3]string{"new", "in_progress", "done"}
 
 type ApiTask struct {
-	ID          uint64 `json:"id"`
+	ID          uint64 `json:"id,omitempty"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
@@ -98,9 +98,10 @@ func (srv *HTTPServer) ShowTasks(fCtx *fiber.Ctx) error {
 func (srv *HTTPServer) CreateTask(fCtx *fiber.Ctx) error {
 	fCtx.Set("Content-Type", "application/json")
 	task := ApiTask{}
-	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
+	if err := fCtx.BodyParser(&task); err != nil {
 		return fmt.Errorf("json unmarshaling error: %w", err)
 	}
+
 	//to mutator
 	threadData := srv.threadToDbPrepeare(ToDB{Task: task, CRUDtype: 1})
 	*srv.WebSocket.BridgePipe.Out <- threadData
@@ -111,17 +112,23 @@ func (srv *HTTPServer) CreateTask(fCtx *fiber.Ctx) error {
 	if !data.IsOk {
 		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("database processing error"))
 	}
-	fCtx.Status(http.StatusOK).JSON(data.Task[0])
+	fCtx.Status(http.StatusOK).JSON(createResponse("task created"))
 	return nil
 }
 
 // handler to PUT
 func (srv *HTTPServer) UpdateTask(fCtx *fiber.Ctx) error {
 	fCtx.Set("Content-Type", "application/json")
-	task := ApiTask{}
-	if err := json.Unmarshal(fCtx.Body(), &task); err != nil {
-		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("json parsing error"))
+	id, err := strconv.Atoi(fCtx.Params("id"))
+	if err != nil {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse(fmt.Sprintf("params parsing error: %s", err)))
 	}
+	task := ApiTask{}
+	if err := fCtx.BodyParser(&task); err != nil {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse(fmt.Sprintf("json body parsing error: %s", err)))
+	}
+
+	task.ID = uint64(id)
 	isOK := false
 	for _, stauts := range TASK_STATS {
 		if stauts == task.Status {
@@ -135,15 +142,30 @@ func (srv *HTTPServer) UpdateTask(fCtx *fiber.Ctx) error {
 	threadData := srv.threadToDbPrepeare(ToDB{Task: task, CRUDtype: 3})
 	*srv.WebSocket.BridgePipe.Out <- threadData
 	//from mutator
-
+	data := srv.dbResponseSeparator(threadData.NumThread)
+	//HTTP response
+	if !data.IsOk {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("database processing error"))
+	}
 	return fCtx.Status(http.StatusOK).JSON(createResponse("task is updated"))
 }
 
 // handler to DELETE
 func (srv *HTTPServer) DeleteTask(fCtx *fiber.Ctx) error {
-	//
-	//
-	return nil
+	id, err := strconv.Atoi(fCtx.Params("id"))
+	if err != nil {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse(fmt.Sprintf("params parsing error: %s", err)))
+	}
+	task := ApiTask{ID: uint64(id)}
+	//to mutator
+	threadData := srv.threadToDbPrepeare(ToDB{Task: task, CRUDtype: 4})
+	*srv.WebSocket.BridgePipe.Out <- threadData
+	//from mutator
+	data := srv.dbResponseSeparator(threadData.NumThread)
+	if !data.IsOk {
+		return fCtx.Status(http.StatusUnprocessableEntity).JSON(createResponse("database processing error"))
+	}
+	return fCtx.Status(http.StatusOK).JSON(createResponse("task is deleted"))
 }
 
 // fiber.Map builder

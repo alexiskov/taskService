@@ -2,7 +2,6 @@ package sqlp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -17,12 +16,12 @@ type dB struct {
 
 type (
 	Task struct {
-		ID      uint64    `db:"id"`
-		Title   string    `db:"title"`
-		Desc    string    `db:"description"`
-		Status  string    `db:"status"`
-		Created time.Time `db:"created_at"`
-		Updated time.Time `db:"updated_at"`
+		ID      uint64    `db:"id, omitempty"`
+		Title   string    `db:"title, omitempty"`
+		Desc    string    `db:"description, omitempty"`
+		Status  string    `db:"status, omitempty"`
+		Created time.Time `db:"created_at, omitempty"`
+		Updated time.Time `db:"updated_at, omitempty"`
 	}
 
 	FromDB struct {
@@ -68,38 +67,42 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 				if err := db.CreateTask(task); err != nil {
 					var empty []Task
 					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
-					//logger
+					//logger from db
 					continue
 				}
-				*out <- FromDB{NumThread: incomingData.NumThread, IsOk: true}
+				var tasks []Task
+				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 2:
 				tasks, err := db.ShowTasks()
 				if err != nil {
 					var empty []Task
 					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
-					//loger
+					//logger from db
 					continue
 				}
 				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 3:
-				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc, Status: incomingData.Task.Status, Updated: time.Now()}
-				resp, err := db.UpdateTask(task)
+				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc, Status: incomingData.Task.Status, Updated: time.Now().UTC()}
+				err := db.UpdateTask(task)
+				var empty []Task
 				if err != nil {
-					var empty []Task
-					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread} //logger
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
+					//logger from db
 					continue
 				}
-				tasks := []Task{}
-				tasks = append(tasks, resp)
-				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
+				*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread, IsOk: true}
 			case 4:
-				task := Task{Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
+				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
+				var empty []Task
 				if err := db.RemoveTask(task); err != nil {
-					var empty []Task
-					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread} //logger
+					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
+					//logger from db
+					//-->example
+					log.Println(err)
+					//<--example
 					continue
 				}
-				*out <- FromDB{NumThread: incomingData.NumThread, IsOk: true}
+				*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread, IsOk: true}
 			}
 		}
 	}
@@ -120,7 +123,6 @@ func (db *dB) ShowTasks() (tasks []Task, err error) {
 
 	tasks, err = pgx.CollectRows(rows, pgx.RowToStructByName[Task])
 	if err != nil {
-		log.Println(err)
 		return nil, fmt.Errorf("parse rows to list of task error: %w", err)
 	}
 	return
@@ -134,29 +136,45 @@ func (db *dB) CreateTask(task Task) error {
 	}
 	defer tx.Rollback(context.Background())
 
-	var id uint64
-	if err = tx.QueryRow(context.Background(), "INSERT INTO tasks (title,description,) VALUES($1,$2)", task.Title, task.Desc).Scan(&id); err != nil {
+	query := "INSERT INTO tasks(title, description) VALUES(@title,@description)"
+	args := pgx.NamedArgs{
+		"title":       task.Title,
+		"description": task.Desc,
+	}
+	if _, err := tx.Exec(context.Background(), query, args); err != nil {
+		return fmt.Errorf("task creating error: %w", err)
+	}
+
+	if err = tx.Commit(context.Background()); err != nil {
 		return fmt.Errorf("task creating error: %w", err)
 	}
 	return nil
 }
 
 // ...UPDATE
-func (db *dB) UpdateTask(task Task) (Task, error) {
+func (db *dB) UpdateTask(task Task) error {
 	tx, err := db.Socket.Begin(context.Background())
 	if err != nil {
-		return Task{}, fmt.Errorf("database socket initialization error:\n %w", err)
+		return fmt.Errorf("database socket initialization error:\n %w", err)
 	}
 	defer tx.Rollback(context.Background())
-	taskResponse := Task{}
-	comTag, err := tx.Exec(context.Background(), "update (`title`, `description`, `status`, `updated_at`) IN `tableName` where `id`=$1", task.ID, task.Title, task.Desc, task.Status, task.Updated.Unix())
+
+	query := "UPDATE tasks SET title=@title, description=@description, status=@status, updated_at=@updated_at where id=@id"
+	args := pgx.NamedArgs{
+		"id":          task.ID,
+		"title":       task.Title,
+		"description": task.Desc,
+		"status":      task.Status,
+		"updated_at":  task.Updated,
+	}
+	_, err = tx.Exec(context.Background(), query, args)
 	if err != nil {
-		return Task{}, err
+		return fmt.Errorf("task updating error: %w", err)
 	}
-	if comTag.RowsAffected() == 0 {
-		return Task{}, fmt.Errorf("DBdata updating error: %w", err)
+	if err = tx.Commit(context.Background()); err != nil {
+		return fmt.Errorf("task updating error: %w", err)
 	}
-	return taskResponse, nil
+	return nil
 }
 
 // ...DELETE
@@ -167,12 +185,15 @@ func (db *dB) RemoveTask(task Task) error {
 	}
 	defer tx.Rollback(context.Background())
 
-	comTag, err := tx.Exec(context.Background(), "DELETE FROM tasks WHERE id=$1", task.ID)
+	query := "DELETE FROM tasks WHERE id=@id"
+	args := pgx.NamedArgs{"id": task.ID}
+
+	_, err = tx.Exec(context.Background(), query, args)
 	if err != nil {
 		return fmt.Errorf("DBdata deleting error: %w", err)
 	}
-	if comTag.RowsAffected() == 0 {
-		return errors.New("DBdata deleting error: Record is Not Deleted")
+	if err = tx.Commit(context.Background()); err != nil {
+		return fmt.Errorf("DBdata deleting error: %w", err)
 	}
 	return nil
 }
