@@ -19,7 +19,6 @@ type ApiTask struct {
 	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
-	IsOk        bool   `json:"-"`
 }
 
 type (
@@ -55,7 +54,7 @@ type (
 )
 
 func Start(port string, inc *chan FromDB, out *chan ToDB) error {
-	srv := &HTTPServer{HTTPport: port}
+	srv := &HTTPServer{HTTPport: ":" + port}
 	srv.WebSocket.Config = &fiber.Config{}
 	srv.WebSocket.Driver = fiber.New(*srv.WebSocket.Config)
 	srv.WebSocket.BridgePipe = &PP{out, inc}

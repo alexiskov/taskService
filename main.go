@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"tasvs/confreader"
 	"tasvs/httpserver"
 	"tasvs/sqlp"
 )
@@ -15,10 +17,15 @@ var (
 )
 
 func main() {
+	config, err := confreader.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	go mutator(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
 	go func() error {
-		err := sqlp.New("postgres://pguser:secret!@localhost:5432/db_1", &SQLtoDB, &SQLtoWeb)
+		err := sqlp.New(fmt.Sprintf("postgres://%s:%s@%s:%s/%s", config.DB.Username, config.DB.Password, config.DB.Ip, config.DB.Port, config.DB.DBname), &SQLtoDB, &SQLtoWeb)
 		if err != nil {
 			fmt.Fprint(os.Stderr, err)
 			return err
@@ -26,7 +33,7 @@ func main() {
 		return nil
 	}()
 
-	err := httpserver.Start(":8080", &HTTPtoWeb, &HTTPtoDb)
+	err = httpserver.Start(config.WebSRV.Port, &HTTPtoWeb, &HTTPtoDb)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server initialization error!\n %+v", err)
 	}
