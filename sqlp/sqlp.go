@@ -56,6 +56,7 @@ func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
 	if err != nil {
 		return fmt.Errorf("database connection pool making error: %w\n", err)
 	}
+	
 	//DB_manager RUNNING
 	if err = db.run(inc, out); err != nil {
 		return
