@@ -8,7 +8,7 @@ import (
 	"tasvs/httpserver"
 	"tasvs/sqlp"
 )
-
+//MULTITHREADS_channel making
 var (
 	HTTPtoDb  = make(chan httpserver.ToDB)
 	HTTPtoWeb = make(chan httpserver.FromDB)
@@ -36,7 +36,7 @@ func main() {
 		return nil
 	}()
 
-	//HTTP-Server RUNNING
+	//HTTP-Server thread RUNNING
 	err = httpserver.Start(config.WebSRV.Port, &HTTPtoWeb, &HTTPtoDb)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server initialization error!\n %+v", err)
