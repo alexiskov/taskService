@@ -42,9 +42,9 @@ type (
 
 //SQL_worker 
 //use incomming and outgoing channels in arg
-func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
+func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
 	db := dB{}
-	conf, err := pgxpool.ParseConfig(socket)
+	conf, err := pgxpool.ParseConfig(dbConfig)
 	conf.ConnConfig.TLSConfig = nil
 	if err != nil {
 		return fmt.Errorf("database credentials parsing error: %w", err)
