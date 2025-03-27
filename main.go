@@ -17,6 +17,7 @@ var (
 )
 
 func main() {
+	//mainConfig_loading
 	config, err := confreader.LoadConfig()
 	if err != nil {
 		log.Fatal(err)
