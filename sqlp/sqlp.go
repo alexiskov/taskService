@@ -10,11 +10,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+//DB_manager
 type dB struct {
 	Socket *pgxpool.Pool
 }
 
 type (
+	//DATA_template
 	Task struct {
 		ID      uint64    `db:"id, omitempty"`
 		Title   string    `db:"title, omitempty"`
@@ -24,6 +26,7 @@ type (
 		Updated time.Time `db:"updated_at, omitempty"`
 	}
 
+	//incoming && outgoing CHANNEL_structs
 	FromDB struct {
 		Task      *[]Task
 		NumThread int64
@@ -37,6 +40,8 @@ type (
 	}
 )
 
+//SQL_worker 
+//use incomming and outgoing channels in arg
 func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
 	db := dB{}
 	conf, err := pgxpool.ParseConfig(socket)
@@ -44,16 +49,19 @@ func New(socket string, inc *chan ToDB, out *chan FromDB) (err error) {
 	if err != nil {
 		return fmt.Errorf("database credentials parsing error: %w", err)
 	}
+	//USE SQL package
 	db.Socket, err = pgxpool.NewWithConfig(context.Background(), conf)
 	if err != nil {
 		return fmt.Errorf("database connection pool making error: %w\n", err)
 	}
+	//DB_manager RUNNING
 	if err = db.run(inc, out); err != nil {
 		return
 	}
 	return
 }
 
+//DB_manager
 // получает данные из канала
 // выполняет операции CRUD над базой данных
 // номер операции соответствует порядковому номеру символа аббривиатуры CRUD, начиная с 1...
