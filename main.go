@@ -40,6 +40,7 @@ func main() {
 
 }
 
+//DATAconverter
 func mutatorHTTPandSQL(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDBchan *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) {
 	// HTTPtoSQL_thread
 	go func() {
