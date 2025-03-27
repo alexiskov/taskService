@@ -43,13 +43,14 @@ type (
 //SQL_worker 
 //use incomming and outgoing channels in arg
 func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
+	//LOAD config to external SQL package driver
 	db := dB{}
 	conf, err := pgxpool.ParseConfig(dbConfig)
 	conf.ConnConfig.TLSConfig = nil
 	if err != nil {
 		return fmt.Errorf("database credentials parsing error: %w", err)
 	}
-	//USE SQL package
+	//USE SQL external package driver of DB_manager
 	db.Socket, err = pgxpool.NewWithConfig(context.Background(), conf)
 	if err != nil {
 		return fmt.Errorf("database connection pool making error: %w\n", err)
@@ -66,12 +67,15 @@ func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
 // выполняет операции CRUD над базой данных
 // номер операции соответствует порядковому номеру символа аббривиатуры CRUD, начиная с 1...
 func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
+	// channel_thread LOOP start
 	for {
 		select {
 		case incomingData := <-*inc:
+			//CRUD_type checking
 			switch incomingData.CRUDtype {
 			case 1:
 				task := Task{Title: incomingData.Task.Title, Desc: incomingData.Task.Desc}
+				//try task writing
 				if err := db.CreateTask(task); err != nil {
 					var empty []Task
 					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
@@ -82,6 +86,7 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 2:
 				tasks, err := db.ShowTasks()
+				//try taskList getting
 				if err != nil {
 					var empty []Task
 					*out <- FromDB{Task: &empty, NumThread: incomingData.NumThread}
@@ -91,6 +96,7 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 				*out <- FromDB{Task: &tasks, NumThread: incomingData.NumThread, IsOk: true}
 			case 3:
 				task := Task{ID: incomingData.Task.ID, Title: incomingData.Task.Title, Desc: incomingData.Task.Desc, Status: incomingData.Task.Status, Updated: time.Now().UTC()}
+				//try task updating
 				err := db.UpdateTask(task)
 				var empty []Task
 				if err != nil {
