@@ -23,9 +23,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//DAta_convertator thread
+	//DAta_convertator thread RUNNING
 	go mutatorHTTPandSQL(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
-
+	
+	//SQL_worker thread RUNNING
 	go func() error {
 		err := sqlp.New(fmt.Sprintf("postgres://%s:%s@%s:%s/%s", config.DB.Username, config.DB.Password, config.DB.Ip, config.DB.Port, config.DB.DBname), &SQLtoDB, &SQLtoWeb)
 		if err != nil {
@@ -35,6 +36,7 @@ func main() {
 		return nil
 	}()
 
+	//HTTP-Server RUNNING
 	err = httpserver.Start(config.WebSRV.Port, &HTTPtoWeb, &HTTPtoDb)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server initialization error!\n %+v", err)
