@@ -62,7 +62,7 @@ func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
 	return
 }
 
-//DB_manager
+//DB_manager THREAD
 // получает данные из канала
 // выполняет операции CRUD над базой данных
 // номер операции соответствует порядковому номеру символа аббривиатуры CRUD, начиная с 1...
