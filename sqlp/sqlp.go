@@ -124,6 +124,7 @@ func (db *dB) run(inc *chan ToDB, out *chan FromDB) error {
 	}
 }
 
+//DRIVER use CONTROLLER
 // method SQL SELECT
 func (db *dB) ShowTasks() (tasks []Task, err error) {
 	tx, err := db.Socket.Begin(context.Background())
