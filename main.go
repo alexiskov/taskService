@@ -23,6 +23,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	//DAta_convertator thread
 	go mutatorHTTPandSQL(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
 	go func() error {
