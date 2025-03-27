@@ -22,7 +22,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go mutator(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
+	go mutatorHTTPandSQL(&HTTPtoDb, &HTTPtoWeb, &SQLtoDB, &SQLtoWeb)
 
 	go func() error {
 		err := sqlp.New(fmt.Sprintf("postgres://%s:%s@%s:%s/%s", config.DB.Username, config.DB.Password, config.DB.Ip, config.DB.Port, config.DB.DBname), &SQLtoDB, &SQLtoWeb)
@@ -40,7 +40,7 @@ func main() {
 
 }
 
-func mutator(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDBchan *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) {
+func mutatorHTTPandSQL(fromHTTP *chan httpserver.ToDB, toHTTP *chan httpserver.FromDB, toDBchan *chan sqlp.ToDB, fromDB *chan sqlp.FromDB) {
 	go func() {
 		for {
 			select {
