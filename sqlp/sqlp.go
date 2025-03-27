@@ -43,6 +43,7 @@ type (
 //SQL_worker 
 //use incomming and outgoing channels in arg
 func New(dbConfig string, inc *chan ToDB, out *chan FromDB) (err error) {
+	//DRIVER
 	//LOAD config to external SQL package driver
 	db := dB{}
 	conf, err := pgxpool.ParseConfig(dbConfig)
